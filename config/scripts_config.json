@@ -496,6 +496,11 @@
         }
       ]
     },
+    "Python": {
+      "icon": "🐍",
+      "description": "Python scripts",
+      "scripts": []
+    },
     "Custom": {
       "icon": "⭐",
       "description": "Your custom scripts",

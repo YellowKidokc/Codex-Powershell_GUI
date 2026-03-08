@@ -73,6 +73,11 @@ class ScriptConfig:
                     "description": "Utility scripts",
                     "scripts": []
                 },
+                "Python": {
+                    "icon": "🐍",
+                    "description": "Python scripts",
+                    "scripts": []
+                },
                 "Custom": {
                     "icon": "⭐",
                     "description": "Your custom scripts",
@@ -98,25 +103,29 @@ class ScriptConfig:
             json.dump(self.config, f, indent=2)
 
     def get_all_scripts(self) -> List[str]:
-        """Get all available PowerShell scripts"""
+        """Get all available scripts (PowerShell and Python)"""
         scripts = []
         if self.scripts_dir.exists():
-            scripts.extend([f.stem for f in self.scripts_dir.glob("*.ps1")])
+            scripts.extend([f.name for f in self.scripts_dir.glob("*.ps1")])
+            scripts.extend([f.name for f in self.scripts_dir.glob("*.py")])
         if self.dump_dir.exists():
-            scripts.extend([f.stem for f in self.dump_dir.glob("*.ps1")])
+            scripts.extend([f.name for f in self.dump_dir.glob("*.ps1")])
+            scripts.extend([f.name for f in self.dump_dir.glob("*.py")])
         return sorted(set(scripts))
 
     def get_script_path(self, script_name: str) -> Optional[Path]:
-        """Get the full path to a script"""
-        # Check main scripts directory first
-        main_path = self.scripts_dir / f"{script_name}.ps1"
-        if main_path.exists():
-            return main_path
-
-        # Check dump directory
-        dump_path = self.dump_dir / f"{script_name}.ps1"
-        if dump_path.exists():
-            return dump_path
+        """Get the full path to a script (supports .ps1 and .py)"""
+        # Try with extension first (if name already has one)
+        for search_dir in [self.scripts_dir, self.dump_dir]:
+            # Direct match (name already includes extension)
+            direct = search_dir / script_name
+            if direct.exists():
+                return direct
+            # Try common extensions
+            for ext in [".ps1", ".py"]:
+                path = search_dir / f"{script_name}{ext}"
+                if path.exists():
+                    return path
 
         return None
 
@@ -376,7 +385,7 @@ class ScriptManagerDialog(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             header,
-            text="📦 Script Manager - Organize Your PowerShell Scripts",
+            text="📦 Script Manager - Organize Your Scripts",
             font=ctk.CTkFont(size=16, weight="bold")
         ).pack(pady=10)
 
@@ -768,7 +777,7 @@ class PowerShellCommander(ctk.CTk):
         self._update_status(f"Loaded {len(scripts)} scripts in {category}")
 
     def _run_script(self, script_info: dict):
-        """Run a PowerShell script"""
+        """Run a PowerShell or Python script"""
         script_name = script_info["name"]
         script_path = self.config.get_script_path(script_name)
 
@@ -788,22 +797,39 @@ class PowerShellCommander(ctk.CTk):
         else:
             args = ""
 
-        # Build command
-        if sys.platform == "win32":
-            cmd = f'powershell.exe -ExecutionPolicy Bypass -File "{script_path}" {args}'
-        else:
-            # For Linux/WSL
-            cmd = f'pwsh -File "{script_path}" {args}'
+        # Detect script type and build command
+        ext = script_path.suffix.lower()
 
-        self.console.append_command(f"{script_name}.ps1 {args}")
+        if ext == ".py":
+            # Python script
+            cmd = f'python "{script_path}" {args}'
+            display = f"{script_name} (Python) {args}"
+        elif ext == ".ps1":
+            # PowerShell script
+            if sys.platform == "win32":
+                cmd = f'powershell.exe -ExecutionPolicy Bypass -File "{script_path}" {args}'
+            else:
+                cmd = f'pwsh -File "{script_path}" {args}'
+            display = f"{script_name} {args}"
+        else:
+            self.console.append(f"❌ Unsupported script type: {ext}\n")
+            return
+
+        # Use working directory if specified in script config
+        work_dir = script_info.get("working_dir", None)
+
+        self.console.append_command(display)
         self._update_status(f"Running: {script_name}...")
 
         # Run in thread to prevent UI freeze
-        thread = threading.Thread(target=self._execute_script, args=(cmd, script_name))
+        thread = threading.Thread(
+            target=self._execute_script,
+            args=(cmd, script_name, work_dir)
+        )
         thread.daemon = True
         thread.start()
 
-    def _execute_script(self, cmd: str, script_name: str):
+    def _execute_script(self, cmd: str, script_name: str, work_dir: str = None):
         """Execute script in background thread"""
         try:
             process = subprocess.Popen(
@@ -812,7 +838,8 @@ class PowerShellCommander(ctk.CTk):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                bufsize=1
+                bufsize=1,
+                cwd=work_dir
             )
 
             # Stream output
