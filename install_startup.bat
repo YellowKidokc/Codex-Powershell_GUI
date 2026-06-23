@@ -1,9 +1,9 @@
 @echo off
-REM PowerShell Commander - Add to Windows Startup
-REM Run this script once to make PowerShell Commander start with Windows
+REM Codex Script Hub - Add to Windows Startup
+REM Run this script once to make Codex Script Hub start with Windows
 
 echo ==============================================
-echo PowerShell Commander - Startup Installation
+echo Codex Script Hub - Startup Installation
 echo ==============================================
 echo.
 
@@ -12,14 +12,14 @@ set SCRIPT_DIR=%~dp0
 
 REM Create startup shortcut
 set STARTUP_FOLDER=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup
-set SHORTCUT_PATH=%STARTUP_FOLDER%\PowerShell Commander.lnk
+set SHORTCUT_PATH=%STARTUP_FOLDER%\Codex Script Hub.lnk
 
 REM Use PowerShell to create the shortcut
-powershell -Command "$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%SHORTCUT_PATH%'); $Shortcut.TargetPath = '%SCRIPT_DIR%start_commander.bat'; $Shortcut.WorkingDirectory = '%SCRIPT_DIR%'; $Shortcut.WindowStyle = 7; $Shortcut.Description = 'PowerShell Commander GUI'; $Shortcut.Save()"
+powershell -Command "$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%SHORTCUT_PATH%'); $Shortcut.TargetPath = '%SCRIPT_DIR%start_commander.bat'; $Shortcut.WorkingDirectory = '%SCRIPT_DIR%'; $Shortcut.WindowStyle = 7; $Shortcut.Description = 'Codex Script Hub'; $Shortcut.Save()"
 
 if %ERRORLEVEL% EQU 0 (
     echo.
-    echo SUCCESS! PowerShell Commander will now start with Windows.
+    echo SUCCESS! Codex Script Hub will now start with Windows.
     echo.
     echo Shortcut created at:
     echo %SHORTCUT_PATH%

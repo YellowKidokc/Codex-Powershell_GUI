@@ -1,19 +1,19 @@
 @echo off
-REM PowerShell Commander - Remove from Windows Startup
+REM Codex Script Hub - Remove from Windows Startup
 
 echo ==============================================
-echo PowerShell Commander - Remove from Startup
+echo Codex Script Hub - Remove from Startup
 echo ==============================================
 echo.
 
 set STARTUP_FOLDER=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup
-set SHORTCUT_PATH=%STARTUP_FOLDER%\PowerShell Commander.lnk
+set SHORTCUT_PATH=%STARTUP_FOLDER%\Codex Script Hub.lnk
 
 if exist "%SHORTCUT_PATH%" (
     del "%SHORTCUT_PATH%"
-    echo SUCCESS! PowerShell Commander removed from startup.
+    echo SUCCESS! Codex Script Hub removed from startup.
 ) else (
-    echo PowerShell Commander was not in startup.
+    echo Codex Script Hub was not in startup.
 )
 
 echo.

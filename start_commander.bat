@@ -1,6 +1,6 @@
 @echo off
-REM PowerShell Commander - Windows Startup Script
-REM This script launches the PowerShell Commander GUI application
+REM Codex Script Hub - Windows Startup Script
+REM This script launches the PySide6 script hub GUI application
 
 REM Get the directory where this script is located
 set SCRIPT_DIR=%~dp0
@@ -14,15 +14,15 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-REM Check if customtkinter is installed
-python -c "import customtkinter" >nul 2>nul
+REM Check if PySide6 is installed
+python -c "import PySide6" >nul 2>nul
 if %ERRORLEVEL% NEQ 0 (
     echo Installing required dependencies...
     pip install -r "%SCRIPT_DIR%requirements.txt"
 )
 
 REM Launch the application
-echo Starting PowerShell Commander...
+echo Starting Codex Script Hub...
 cd /d "%SCRIPT_DIR%"
 start "" pythonw powershell_commander.py
 

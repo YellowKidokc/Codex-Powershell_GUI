@@ -1,4 +1,5 @@
-# PowerShell Commander Dependencies
+# Codex Script Hub Dependencies
 # Install with: pip install -r requirements.txt
 
 customtkinter>=5.2.0
+PySide6>=6.7.0

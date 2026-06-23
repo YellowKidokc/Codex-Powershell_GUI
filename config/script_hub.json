@@ -1,0 +1,30 @@
+{
+  "roots": [
+    {
+      "label": "Script Dump",
+      "path": "D:\\GitHub\\Codex-Powershell_GUI\\script_dump"
+    },
+    {
+      "label": "Project Root",
+      "path": "D:\\GitHub\\Codex-Powershell_GUI"
+    },
+    {
+      "label": "Organize",
+      "path": "D:\\GitHub\\organize"
+    }
+  ],
+  "pinned": [],
+  "filters": {
+    "extensions": [
+      ".bat",
+      ".cmd",
+      ".ps1",
+      ".py"
+    ]
+  },
+  "ui": {
+    "window_width": 1480,
+    "window_height": 920,
+    "accent": "#8be9fd"
+  }
+}
