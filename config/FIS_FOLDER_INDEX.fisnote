@@ -1,0 +1,23 @@
+---
+fis_schema: tag-ledger.v1
+run_id: 1
+folder: "Codex-Powershell_GUI\\config"
+generated_at: "2026-06-23T17:14:16"
+ledger: "D:\\DONT TOUCH BOOT UP\\FIS\\fis_runtime\\tag_ledger.sqlite"
+tags: ["folder", "config", "data", "script"]
+file_count: 2
+child_folder_count: 0
+---
+
+# FIS Folder Index: config
+
+This folder has been seen by the FIS tag ledger. The ledger records names, tags, skipped items, and move status.
+
+Move state: every listed file starts as `not_moved` until a later approved mover records otherwise.
+
+## Direct Files
+
+- `script_hub.json` :: #file #data #json #ext-json #script #hub :: move_status=not_moved
+- `scripts_config.json` :: #file #data #json #ext-json #scripts #config :: move_status=not_moved
+
+<!-- FIS tag-ledger.v1: parseable note; safe to regenerate. -->
