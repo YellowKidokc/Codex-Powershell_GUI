@@ -13,6 +13,8 @@ import json
 import os
 import shutil
 import sys
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
@@ -57,6 +59,14 @@ DEFAULT_IGNORE_DIRS = {
     "coverage",
 }
 SCRIPT_EXTENSIONS = {".ps1", ".py", ".bat", ".cmd"}
+API_EXTENSION = ".api.json"
+MANAGED_LIBRARY = APP_DIR / "script_dump"
+
+
+def configured_path(value: str) -> Path:
+    """Resolve portable config paths relative to the application directory."""
+    path = Path(value).expanduser()
+    return path.resolve() if path.is_absolute() else (APP_DIR / path).resolve()
 
 
 @dataclass(frozen=True)
@@ -69,14 +79,18 @@ class ScriptEntry:
 
     @property
     def name(self) -> str:
+        if self.path.name.lower().endswith(API_EXTENSION):
+            return self.path.name[:-len(API_EXTENSION)]
         return self.path.stem
 
     @property
     def display_name(self) -> str:
-        return self.path.stem.replace("-", " ").replace("_", " ").title()
+        return self.name.replace("-", " ").replace("_", " ").title()
 
     @property
     def kind(self) -> str:
+        if self.path.name.lower().endswith(API_EXTENSION):
+            return "API"
         return self.extension.lstrip(".").upper()
 
     @property
@@ -146,18 +160,24 @@ class ScriptHubConfig:
         roots = self.data.setdefault("roots", [])
         normalized = str(Path(path).resolve())
         for root in roots:
-            if str(Path(root["path"]).resolve()) == normalized:
+            if str(configured_path(root["path"])) == normalized:
                 root["label"] = label
                 self.save()
                 return
         roots.append({"label": label, "path": normalized})
         self.save()
 
+    def ensure_managed_root(self) -> None:
+        MANAGED_LIBRARY.mkdir(parents=True, exist_ok=True)
+        if not any(configured_path(root["path"]) == MANAGED_LIBRARY.resolve() for root in self.roots):
+            self.data.setdefault("roots", []).insert(0, {"label": "My Library", "path": "script_dump"})
+            self.save()
+
     def remove_root(self, path: str) -> None:
         normalized = str(Path(path).resolve())
         self.data["roots"] = [
             root for root in self.data.get("roots", [])
-            if str(Path(root["path"]).resolve()) != normalized
+            if str(configured_path(root["path"])) != normalized
         ]
         self.save()
 
@@ -193,6 +213,7 @@ class ScriptHub(QMainWindow):
     def __init__(self):
         super().__init__()
         self.config = ScriptHubConfig(CONFIG_PATH)
+        self.config.ensure_managed_root()
         self.entries: List[ScriptEntry] = []
         self.entries_by_path: Dict[str, ScriptEntry] = {}
         self.current_filter = "all"
@@ -307,7 +328,7 @@ class ScriptHub(QMainWindow):
         title_block = QVBoxLayout()
         title = QLabel("Codex Script Hub")
         title.setObjectName("title")
-        subtitle = QLabel("Launch PowerShell, Python, and helper scripts from any folder you add.")
+        subtitle = QLabel("Organize scripts into categories, keep related tools together, and call saved APIs.")
         subtitle.setObjectName("subtitle")
         title_block.addWidget(title)
         title_block.addWidget(subtitle)
@@ -328,6 +349,11 @@ class ScriptHub(QMainWindow):
         self.add_root_button.clicked.connect(self.add_root_dialog)
         header_layout.addWidget(self.add_root_button)
 
+        self.import_button = QPushButton("Import")
+        self.import_button.setObjectName("accent")
+        self.import_button.clicked.connect(self.import_scripts_dialog)
+        header_layout.addWidget(self.import_button)
+
         outer.addWidget(header)
 
         filter_bar = QFrame()
@@ -346,6 +372,7 @@ class ScriptHub(QMainWindow):
             ("ps1", "PowerShell"),
             ("py", "Python"),
             ("batch", "Batch"),
+            ("api", "APIs"),
             ("pinned", "Pinned"),
         ]:
             button = QToolButton()
@@ -385,10 +412,16 @@ class ScriptHub(QMainWindow):
         left_layout.addWidget(self.root_list, 1)
 
         root_buttons = QHBoxLayout()
+        self.category_button = QPushButton("New Category")
+        self.category_button.clicked.connect(self.create_category_dialog)
+        self.api_button = QPushButton("New API")
+        self.api_button.clicked.connect(self.create_api_dialog)
         self.remove_root_button = QPushButton("Remove Root")
         self.remove_root_button.clicked.connect(self.remove_selected_root)
         self.open_root_button = QPushButton("Open Root")
         self.open_root_button.clicked.connect(self.open_selected_root)
+        root_buttons.addWidget(self.category_button)
+        root_buttons.addWidget(self.api_button)
         root_buttons.addWidget(self.remove_root_button)
         root_buttons.addWidget(self.open_root_button)
         left_layout.addLayout(root_buttons)
@@ -522,7 +555,7 @@ class ScriptHub(QMainWindow):
         entries: List[ScriptEntry] = []
         search_term = self.search.text().strip().lower()
         for root in self.config.roots:
-            root_path = Path(root["path"]).expanduser()
+            root_path = configured_path(root["path"])
             root_label = root.get("label") or root_path.name
             if not root_path.exists():
                 continue
@@ -545,7 +578,7 @@ class ScriptHub(QMainWindow):
                     rel_dir=rel_dir,
                     extension=path.suffix.lower(),
                 )
-                if entry.extension not in SCRIPT_EXTENSIONS:
+                if entry.extension not in SCRIPT_EXTENSIONS and not entry.path.name.lower().endswith(API_EXTENSION):
                     continue
                 if self._matches_filters(entry, search_term):
                     entries.append(entry)
@@ -560,7 +593,7 @@ class ScriptHub(QMainWindow):
             ]
             for filename in filenames:
                 candidate = Path(dirpath) / filename
-                if candidate.suffix.lower() in SCRIPT_EXTENSIONS:
+                if candidate.suffix.lower() in SCRIPT_EXTENSIONS or candidate.name.lower().endswith(API_EXTENSION):
                     yield candidate
 
     def _matches_filters(self, entry: ScriptEntry, search_term: str) -> bool:
@@ -584,6 +617,8 @@ class ScriptHub(QMainWindow):
         if self.current_filter == "py" and entry.extension != ".py":
             return False
         if self.current_filter == "batch" and entry.extension not in {".bat", ".cmd"}:
+            return False
+        if self.current_filter == "api" and not entry.path.name.lower().endswith(API_EXTENSION):
             return False
 
         return True
@@ -609,7 +644,7 @@ class ScriptHub(QMainWindow):
         self.root_list.addTopLevelItem(roots_item)
         counts = self._counts_by_root()
         for root in self.config.roots:
-            root_path = Path(root["path"]).expanduser()
+            root_path = configured_path(root["path"])
             label = root.get("label") or root_path.name
             count = counts.get(label, 0)
             item = QTreeWidgetItem([f"{label}  ({count})"])
@@ -649,7 +684,7 @@ class ScriptHub(QMainWindow):
             node.setdefault("__files__", []).append(entry)
 
         for root in self.config.roots:
-            root_path = Path(root["path"]).expanduser()
+            root_path = configured_path(root["path"])
             label = root.get("label") or root_path.name
             if label not in grouped:
                 continue
@@ -714,7 +749,7 @@ class ScriptHub(QMainWindow):
             self._clear_details()
             return
         path = item.data(0, Qt.UserRole)
-        if not path or path == "ROOT" or not str(path).lower().endswith(tuple(SCRIPT_EXTENSIONS)):
+        if not path or path == "ROOT" or str(path) not in self.entries_by_path:
             self.current_entry = None
             self._clear_details()
             return
@@ -749,6 +784,9 @@ class ScriptHub(QMainWindow):
         self.run_script(self.current_entry)
 
     def run_script(self, entry: ScriptEntry) -> None:
+        if entry.path.name.lower().endswith(API_EXTENSION):
+            self.run_api(entry)
+            return
         if self.process and self.process.state() != QProcess.NotRunning:
             QMessageBox.warning(self, "Script running", "A script is already running. Stop it first if you want to start another one.")
             return
@@ -772,6 +810,29 @@ class ScriptHub(QMainWindow):
         self.console.write(f"Folder:  {entry.path.parent}\n\n")
         self.statusBar().showMessage(f"Running {entry.display_name}...")
         self.process.start(program, args)
+
+    def run_api(self, entry: ScriptEntry) -> None:
+        """Execute a small, portable API request definition."""
+        try:
+            definition = json.loads(entry.path.read_text(encoding="utf-8"))
+            method = str(definition.get("method", "GET")).upper()
+            url = str(definition["url"])
+            headers = {str(k): str(v) for k, v in definition.get("headers", {}).items()}
+            body = definition.get("body")
+            payload = None if body in (None, "") else json.dumps(body).encode("utf-8")
+            if payload is not None and not any(key.lower() == "content-type" for key in headers):
+                headers["Content-Type"] = "application/json"
+            request = urllib.request.Request(url, data=payload, headers=headers, method=method)
+            self.console.banner(f"Calling {entry.display_name}")
+            self.console.write(f"{method} {url}\n\n")
+            with urllib.request.urlopen(request, timeout=30) as response:
+                response_body = response.read().decode("utf-8", errors="replace")
+                self.console.write(f"HTTP {response.status} {response.reason}\n")
+                self.console.write(response_body + "\n")
+            self.statusBar().showMessage(f"API completed: {entry.display_name}")
+        except (OSError, ValueError, KeyError, urllib.error.URLError) as error:
+            self.console.write(f"[API error] {error}\n")
+            self.statusBar().showMessage("API request failed")
 
     def _build_command(self, entry: ScriptEntry) -> tuple[str, List[str]]:
         ext = entry.extension
@@ -857,6 +918,94 @@ class ScriptHub(QMainWindow):
         label = label.strip() or default_label
         self.config.add_root(label, chosen)
         self.refresh_library()
+
+    @staticmethod
+    def _safe_category(value: str) -> Path:
+        parts = [part.strip() for part in value.replace("\\", "/").split("/")]
+        safe = [part for part in parts if part]
+        if (
+            not safe
+            or any(part in {".", ".."} for part in safe)
+            or any(any(char in part for char in '<>:"|?*') for part in safe)
+        ):
+            raise ValueError("Use a category name such as Admin/Backups; special filename characters are not allowed.")
+        return Path(*safe)
+
+    def _ask_category(self, title: str) -> Optional[Path]:
+        value, ok = QInputDialog.getText(
+            self, title, "Category or nested category (example: Admin/Backups):"
+        )
+        if not ok:
+            return None
+        try:
+            category = self._safe_category(value)
+        except ValueError as error:
+            QMessageBox.warning(self, "Invalid category", str(error))
+            return None
+        destination = MANAGED_LIBRARY / category
+        destination.mkdir(parents=True, exist_ok=True)
+        return destination
+
+    def create_category_dialog(self) -> None:
+        destination = self._ask_category("Create category")
+        if destination:
+            self.refresh_library()
+            self.statusBar().showMessage(f"Created category: {destination.relative_to(MANAGED_LIBRARY)}")
+
+    def import_scripts_dialog(self) -> None:
+        files, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Import related scripts",
+            "",
+            "Scripts (*.ps1 *.py *.bat *.cmd);;All files (*)",
+        )
+        if not files:
+            return
+        destination = self._ask_category("Keep these scripts together")
+        if not destination:
+            return
+        imported = 0
+        for source_name in files:
+            source = Path(source_name)
+            if source.suffix.lower() not in SCRIPT_EXTENSIONS:
+                continue
+            target = destination / source.name
+            counter = 2
+            while target.exists():
+                target = destination / f"{source.stem}-{counter}{source.suffix}"
+                counter += 1
+            shutil.copy2(source, target)
+            imported += 1
+        self.refresh_library()
+        self.statusBar().showMessage(f"Imported {imported} script(s) into {destination.name}")
+
+    def create_api_dialog(self) -> None:
+        destination = self._ask_category("Choose an API category")
+        if not destination:
+            return
+        name, ok = QInputDialog.getText(self, "New API", "Request name:")
+        if not ok or not name.strip():
+            return
+        url, ok = QInputDialog.getText(self, "New API", "URL (https://...):")
+        if not ok or not url.strip():
+            return
+        method, ok = QInputDialog.getItem(
+            self, "New API", "HTTP method:", ["GET", "POST", "PUT", "PATCH", "DELETE"], 0, False
+        )
+        if not ok:
+            return
+        safe_name = "".join(char if char.isalnum() or char in "-_" else "-" for char in name.strip()).strip("-")
+        if not safe_name:
+            QMessageBox.warning(self, "Invalid name", "Please use letters or numbers in the request name.")
+            return
+        target = destination / f"{safe_name}.api.json"
+        if target.exists():
+            QMessageBox.warning(self, "API already exists", str(target))
+            return
+        definition = {"method": method, "url": url.strip(), "headers": {}, "body": None}
+        target.write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
+        self.refresh_library()
+        self.statusBar().showMessage(f"Created API request: {name.strip()}")
 
     def open_selected_file(self) -> None:
         if self.current_entry:
