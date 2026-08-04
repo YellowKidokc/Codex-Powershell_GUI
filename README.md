@@ -13,6 +13,9 @@ A dark-themed PySide6 launcher for PowerShell, Python, and batch scripts.
 - **One-click execution**: Launch `.ps1`, `.py`, `.bat`, and `.cmd` scripts
 - **Console output**: See stdout and stderr inside the app
 - **Pin favorites**: Mark your most-used scripts for quick access
+- **Nested categories**: Create headings such as `Admin/Backups` or `APIs/GitHub`
+- **Grouped imports**: Import several PowerShell, Python, batch, or command scripts into one category
+- **Saved API calls**: Create reusable GET, POST, PUT, PATCH, and DELETE requests and run them from the hub
 
 ## Installation
 
@@ -62,6 +65,32 @@ To remove from startup:
 2. The app scans that folder recursively and shows anything ending in `.ps1`, `.py`, `.bat`, or `.cmd`.
 3. Use the search bar or the extension filters to narrow the list.
 4. Click a script, then use **Run**, **Open Folder**, **Open File**, **Copy Path**, or **Pin / Unpin**.
+
+### Organizing a managed library
+
+The app automatically adds `script_dump` as **My Library**. Click **New Category** to
+make one or more nested headings (use `/` between levels). Click **Import** to choose
+multiple related scripts and copy them into the same category. Existing folders still
+work as roots, so this managed library does not replace your current layout.
+
+### Saving API calls
+
+Click **New API**, choose its category, name it, and enter its URL and HTTP method.
+The hub saves an editable `*.api.json` definition alongside your scripts. Select it
+and click **Run** to send the request and show its status and response in the console.
+Headers and JSON request bodies can be added by opening the definition and editing:
+
+```json
+{
+  "method": "POST",
+  "url": "https://example.com/api/items",
+  "headers": {"Authorization": "Bearer replace-me"},
+  "body": {"name": "example"}
+}
+```
+
+API calls use a 30-second timeout. Treat definitions like source code: do not commit
+real passwords or API tokens to Git.
 
 ### Configuration
 
